@@ -1,7 +1,7 @@
 import json
 import logging
+import sys
 
-import praw
 import tweepy
 
 from TwitterToReddit import constants
@@ -15,10 +15,6 @@ twitter_hashtag = '#uploadplan'
 # subreddit to post to; required
 subreddit = 'l3d00m'
 
-reddit_auth = praw.Reddit(user_agent="Twitter X-Poster by l3d00m")
-reddit_auth.set_oauth_app_info(client_id=constants.reddit_client_id, client_secret=constants.reddit_client_secret,
-                               redirect_uri=constants.reddit_redirect_uri)
-
 twitter_auth = tweepy.OAuthHandler(constants.twitter_consumer_key, constants.twitter_consumer_key_secret)
 twitter_auth.set_access_token(constants.twitter_access_token, constants.twitter_access_token_secret)
 
@@ -30,8 +26,10 @@ class Tweet(object):
 
     def __init__(self, json):
         if 'delete' in json:
-            print("is deleted")
+            self.deleted = True
+            logging.debug("is deleted")
             return
+        self.deleted = False
         self.text = json['text']
         self.user = json['user']
         self.id = json['id']
@@ -42,37 +40,42 @@ class Tweet(object):
 
 
 class StdOutListener(tweepy.StreamListener):
-    """ Handles data received from the stream.
-        http://docs.tweepy.org/en/v3.4.0/streaming_how_to.html """
+    """
+    Handles data received from the stream.
+    http://docs.tweepy.org/en/v3.4.0/streaming_how_to.html
+    """
 
     def on_data(self, data):
-        tweet_json = json.loads(data)
-        print(tweet_json)
+        logging.debug(data)
 
-        tweet = Tweet(tweet_json)
+        tweet = Tweet(json=json.loads(data))
+        
+        if tweet.deleted:
+            return True
 
-        if twitter_user_id == '' or tweet.user['id'] != twitter_user_id:
+        if twitter_user_id == '' or str(tweet.user['id']) != twitter_user_id:
+            logging.debug("Author has another id (" + str(tweet.user['id']) + "), not posting")
             # Check if user is given and if true, then it should equal the tweet author;
             # otherwise we will return True
             return True
 
         image_url = extract_image_url(tweet)
-        if image_url == '':
-            # image_url = tweet.$LINK
-            # todo use normal tweet link then
-            return True
-
-        submit_to_reddit(image_url)
+        if image_url != '':
+            submit_to_reddit(image_url)
 
         return True  # To continue listening
 
     def on_error(self, status_code):
-        print('Got an error with status code: ' + str(status_code))
+        logging.warning('Got an error with status code: ' + str(status_code))
         return True  # To continue listening
 
     def on_timeout(self):
-        print('Timeout...')
+        logging.warning('Timeout...')
         return True  # To continue listening
+
+    def on_disconnect(self, notice):
+        logging.critical('We got disconnected by twitter')
+        sys.exit(1)
 
 
 def main():
@@ -84,7 +87,7 @@ def main():
 
     stream = tweepy.Stream(twitter_auth, listener)
     if twitter_hashtag != '':
-        stream.filter(track=[twitter_hashtag])
+        stream.filter(follow=[twitter_user_id], track=[twitter_hashtag])
     elif twitter_user_id != '':
         stream.filter(follow=[twitter_user_id])
     else:
