@@ -1,85 +1,44 @@
+import json
+import logging
+
 import praw
 import tweepy
 
-import json
-import datetime
-
 from TwitterToReddit import constants
+from TwitterToReddit.utils import extract_image_url
+from TwitterToReddit.utils import submit_to_reddit
 
-# http://gettwitterid.com/
+# http://gettwitterid.com/; optional
 twitter_user_id = '109850283'
-# optional:
+# optional
 twitter_hashtag = '#uploadplan'
+# subreddit to post to; required
 subreddit = 'l3d00m'
 
-r = praw.Reddit(user_agent="Twitter X-Poster by l3d00m")
-r.set_oauth_app_info(client_id=constants.reddit_client_id, client_secret=constants.reddit_client_secret,
-                     redirect_uri="http://127.0.0.1")
+reddit_auth = praw.Reddit(user_agent="Twitter X-Poster by l3d00m")
+reddit_auth.set_oauth_app_info(client_id=constants.reddit_client_id, client_secret=constants.reddit_client_secret,
+                               redirect_uri=constants.reddit_redirect_uri)
+
+twitter_auth = tweepy.OAuthHandler(constants.twitter_consumer_key, constants.twitter_consumer_key_secret)
+twitter_auth.set_access_token(constants.twitter_access_token, constants.twitter_access_token_secret)
 
 
 class Tweet(object):
+    """
+    Source: https://github.com/joealcorn/TweetPoster
+    """
+
     def __init__(self, json):
         if 'delete' in json:
             print("is deleted")
             return
         self.text = json['text']
         self.user = json['user']
-        self.user_id = self.user['id']
         self.id = json['id']
         self.entities = json['entities']
 
     def __repr__(self):
-        return '<TwitterToReddit.__init__.Tweet ({0})>'.format(self.id)
-
-
-def extract_image(tweet):
-    """
-    Source: https://github.com/joealcorn/TweetPoster
-    :param tweet: Tweet Object to get the link from
-    """
-
-    print("rehosting images")
-    if 'media' in tweet.entities:
-        for media in tweet.entities['media']:
-            if media['type'] != 'photo':
-                print("media is not image")
-                continue
-
-            url = media['media_url']
-            reddit(url)
-
-
-def reddit(url):
-    """ https://praw.readthedocs.org/en/stable/pages/oauth.html
-    :param url: Url to add to the reddit link post
-    """
-
-    # https://praw.readthedocs.org/en/stable/pages/oauth.html#step-4-exchanging-the-code-for-an-access-token-and-a-refresh-token
-    # Get an access token:
-    #
-    # url = r.get_authorize_url('uniqueKey', 'submit', True)
-    # import webbrowser
-    # webbrowser.open(url)
-
-    # https://praw.readthedocs.org/en/stable/pages/oauth.html#step-6-refreshing-the-access-token
-    # Copy the access token and get the refresh token
-    #
-    # access_information = r.get_access_information('CODE YOU GOT ABOVE')
-    # print(access_information['refresh_token'])
-
-    if url == '':
-        print("url is emtpy")
-        return
-
-    # use the refresh token:
-    r.refresh_access_information(constants.reddit_client_refresh)
-
-    now = datetime.datetime.now()
-    print("Submitting \"" + url + "\" to" + subreddit)
-    r.submit(subreddit,
-             'Uploadplan vom ' + str(now.day) + "." + str(now.month) + "." + str(now.year)
-             # + " um "+ str(now.hour) + ":" + str(now.minute)
-             , url=url)
+        return '<TwitterToReddit.utils.Tweet ({0})>'.format(self.id)
 
 
 class StdOutListener(tweepy.StreamListener):
@@ -87,11 +46,23 @@ class StdOutListener(tweepy.StreamListener):
         http://docs.tweepy.org/en/v3.4.0/streaming_how_to.html """
 
     def on_data(self, data):
-        # Prints the text of the tweet
-        print(data)
-        tweet = Tweet(json.loads(data))
-        if tweet.user_id == twitter_user_id:
-            extract_image(tweet)
+        tweet_json = json.loads(data)
+        print(tweet_json)
+
+        tweet = Tweet(tweet_json)
+
+        if twitter_user_id == '' or tweet.user['id'] != twitter_user_id:
+            # Check if user is given and if true, then it should equal the tweet author;
+            # otherwise we will return True
+            return True
+
+        image_url = extract_image_url(tweet)
+        if image_url == '':
+            # image_url = tweet.$LINK
+            # todo use normal tweet link then
+            return True
+
+        submit_to_reddit(image_url)
 
         return True  # To continue listening
 
@@ -105,12 +76,16 @@ class StdOutListener(tweepy.StreamListener):
 
 
 def main():
-    listener = StdOutListener()
-    auth = tweepy.OAuthHandler(constants.twitter_consumer_key, constants.twitter_consumer_key_secret)
-    auth.set_access_token(constants.twitter_access_token, constants.twitter_access_token_secret)
+    if subreddit == '':
+        logging.critical("no subreddit given")
+        return
 
-    stream = tweepy.Stream(auth, listener)
+    listener = StdOutListener()
+
+    stream = tweepy.Stream(twitter_auth, listener)
     if twitter_hashtag != '':
-        stream.filter(follow=[twitter_user_id], track=[twitter_hashtag])
-    else:
+        stream.filter(track=[twitter_hashtag])
+    elif twitter_user_id != '':
         stream.filter(follow=[twitter_user_id])
+    else:
+        logging.warning("No filter given! Either 'twitter_user_id' or 'twitter_hashtag' should have a valid value!")
