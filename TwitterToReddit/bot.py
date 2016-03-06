@@ -15,9 +15,6 @@ twitter_hashtag = '#uploadplan'
 # subreddit to post to; required
 subreddit = 'l3d00m'
 
-twitter_auth = tweepy.OAuthHandler(constants.twitter_consumer_key, constants.twitter_consumer_key_secret)
-twitter_auth.set_access_token(constants.twitter_access_token, constants.twitter_access_token_secret)
-
 
 class Tweet(object):
     """
@@ -49,7 +46,7 @@ class StdOutListener(tweepy.StreamListener):
         logging.debug(data)
 
         tweet = Tweet(json=json.loads(data))
-        
+
         if tweet.deleted:
             return True
 
@@ -84,6 +81,9 @@ def main():
         return
 
     listener = StdOutListener()
+
+    twitter_auth = tweepy.OAuthHandler(constants.twitter_consumer_key, constants.twitter_consumer_key_secret)
+    twitter_auth.set_access_token(constants.twitter_access_token, constants.twitter_access_token_secret)
 
     stream = tweepy.Stream(twitter_auth, listener)
     if twitter_hashtag != '':
