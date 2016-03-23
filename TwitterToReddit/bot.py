@@ -64,31 +64,37 @@ class StdOutListener(tweepy.StreamListener):
 
     def on_error(self, status_code):
         logging.warning('Got an error with status code: ' + str(status_code))
-        return True  # To continue listening
+        raise Exception # restart listener
 
     def on_timeout(self):
         logging.warning('Timeout...')
-        return True  # To continue listening
+        raise Exception # restart listener
 
     def on_disconnect(self, notice):
         logging.critical('We got disconnected by twitter')
-        sys.exit(1)
+        raise Exception # restart listener
 
 
 def main():
     if subreddit == '':
         logging.critical("no subreddit given")
         return
+    # Restart on error
+    while True:
+        try:
+            listener = StdOutListener()
 
-    listener = StdOutListener()
+            twitter_auth = tweepy.OAuthHandler(constants.twitter_consumer_key, constants.twitter_consumer_key_secret)
+            twitter_auth.set_access_token(constants.twitter_access_token, constants.twitter_access_token_secret)
 
-    twitter_auth = tweepy.OAuthHandler(constants.twitter_consumer_key, constants.twitter_consumer_key_secret)
-    twitter_auth.set_access_token(constants.twitter_access_token, constants.twitter_access_token_secret)
-
-    stream = tweepy.Stream(twitter_auth, listener)
-    if twitter_hashtag != '':
-        stream.filter(follow=[twitter_user_id], track=[twitter_hashtag])
-    elif twitter_user_id != '':
-        stream.filter(follow=[twitter_user_id])
-    else:
-        logging.warning("No filter given! Either 'twitter_user_id' or 'twitter_hashtag' should have a valid value!")
+            stream = tweepy.Stream(twitter_auth, listener)
+            if twitter_hashtag != '':
+                stream.filter(follow=[twitter_user_id], track=[twitter_hashtag])
+            elif twitter_user_id != '':
+                stream.filter(follow=[twitter_user_id])
+            else:
+                logging.warning("No filter given! Either 'twitter_user_id' or 'twitter_hashtag' should have a valid value!")
+        except Exception as e:
+            if e is not "":
+                logging.critical("Error, restarting: " + str(e))
+            pass
