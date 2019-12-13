@@ -3,11 +3,13 @@ import logging
 
 import praw
 
+
 from TwitterToReddit import constants
 
-reddit_auth = praw.Reddit(user_agent="Twitter X-Poster by l3d00m")
-reddit_auth.set_oauth_app_info(client_id=constants.reddit_client_id, client_secret=constants.reddit_client_secret,
-                               redirect_uri=constants.reddit_redirect_uri)
+reddit = praw.Reddit(client_id=constants.reddit_client_id,
+                     client_secret=constants.reddit_client_secret,
+                     refresh_token=constants.reddit_client_refresh,
+                     user_agent="Twitter X-Poster by l3d00m")
 
 
 def extract_image_url(tweet):
@@ -42,11 +44,9 @@ def submit_to_reddit(url):
         return
 
     now = datetime.datetime.now()
-    title = 'Uploadplan vom ' + str(now.day) + "." + str(now.month) + "." + str(now.year)
+    title = 'Tweet at ' + str(now.day) + "." + str(now.month) + "." + str(now.year)
 
     logging.info("Submitting \"" + url + "\" to" + subreddit + ". Title is: " + title)
 
-    # use the refresh token to get new access information regularly (at least every hour):
-    reddit_auth.refresh_access_information(constants.reddit_client_refresh)
     # Submit the post
-    reddit_auth.submit(subreddit, title, url=url)
+    reddit.subreddit(subreddit).submit(title=title, url=url)

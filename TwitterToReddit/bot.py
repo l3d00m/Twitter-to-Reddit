@@ -1,6 +1,6 @@
 import json
 import logging
-import sys
+import time
 
 import tweepy
 
@@ -8,12 +8,12 @@ from TwitterToReddit import constants
 from TwitterToReddit.utils import extract_image_url
 from TwitterToReddit.utils import submit_to_reddit
 
-# http://gettwitterid.com/; optional
+# http://gettwitterid.com/; required
 twitter_user_id = '109850283'
 # optional
 twitter_hashtag = '#uploadplan'
 # subreddit to post to; required
-subreddit = 'l3d00m'
+subreddit = 'test'
 
 
 class Tweet(object):
@@ -64,18 +64,18 @@ class StdOutListener(tweepy.StreamListener):
 
     def on_error(self, status_code):
         logging.warning('Got an error with status code: ' + str(status_code))
-        raise Exception # restart listener
+        raise Exception  # restart listener
 
     def on_timeout(self):
         logging.warning('Timeout...')
-        raise Exception # restart listener
+        raise Exception  # restart listener
 
     def on_disconnect(self, notice):
         logging.critical('We got disconnected by twitter')
-        raise Exception # restart listener
+        raise Exception  # restart listener
 
 
-def main():
+def start():
     if subreddit == '':
         logging.critical("no subreddit given")
         return
@@ -84,17 +84,19 @@ def main():
         try:
             listener = StdOutListener()
 
-            twitter_auth = tweepy.OAuthHandler(constants.twitter_consumer_key, constants.twitter_consumer_key_secret)
-            twitter_auth.set_access_token(constants.twitter_access_token, constants.twitter_access_token_secret)
+            twitter_auth = tweepy.AppAuthHandler(constants.twitter_consumer_key, constants.twitter_consumer_key_secret)
+            twitter_api = tweepy.API(twitter_auth)
 
-            stream = tweepy.Stream(twitter_auth, listener)
-            if twitter_hashtag != '':
-                stream.filter(follow=[twitter_user_id], track=[twitter_hashtag])
-            elif twitter_user_id != '':
-                stream.filter(follow=[twitter_user_id])
+            stream = tweepy.Stream(auth=twitter_api.auth, listener=listener)
+            if twitter_user_id != '':
+                if twitter_hashtag != '':
+                    stream.filter(follow=[twitter_user_id], track=[twitter_hashtag])
+                else:
+                    stream.filter(follow=[twitter_user_id])
             else:
-                logging.warning("No filter given! Either 'twitter_user_id' or 'twitter_hashtag' should have a valid value!")
+                logging.warning("No filter given! 'twitter_user_id' must have a valid value!")
         except Exception as e:
-            if e is not "":
+            if e != "":
                 logging.critical("Error, restarting: " + str(e))
+            time.sleep(2)
             pass

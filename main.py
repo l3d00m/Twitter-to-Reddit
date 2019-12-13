@@ -1,8 +1,8 @@
 def main():
-    from TwitterToReddit import bot
+    from TwitterToReddit.bot import start
     import logging
     logging.getLogger().setLevel(logging.DEBUG)
-    bot.main()
+    start()
 
 
 if __name__ == '__main__':
